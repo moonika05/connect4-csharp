@@ -1,6 +1,7 @@
 # icd0008-25f
 
 
-Moonika Minaškin
+Moonika Minaškin,
 243832IADB, 
-momina@taltech.ee
+momina@taltech.ee,
+momina
