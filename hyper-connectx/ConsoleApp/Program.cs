@@ -27,10 +27,10 @@ namespace ConsoleApp
                 Console.ReadKey();
                 return "";
             });
-            
+
             mainMenu.Run();
-            
+
             Console.ReadKey();
         }
     }
-}
+}    
