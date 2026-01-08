@@ -1,7 +1,7 @@
 using System;
 using System.Text.Json.Serialization;
 
-namespace ConsoleApp.GameEngine
+namespace ConsoleApp.GameEngine.Models
 {
     // GameState - complete snapshot of a game
     // Includes board state, configuration, and game progress

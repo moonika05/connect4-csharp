@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using ConsoleApp.GameEngine.Models;
 
 namespace ConsoleApp.GameEngine
 {
@@ -7,9 +8,9 @@ namespace ConsoleApp.GameEngine
     // Handles piece placement, win checking, board display
     public class GameBoard
     {
-        private readonly int[,] _board;  // 2D array: 0=empty, 1=Player1(X), 2=Player2(O)
+        private readonly int[,] _board; // 2D array: 0=empty, 1=Player1(X), 2=Player2(O)
         private readonly GameConfiguration _config;
-        
+
         // Shortcut properties for board dimensions
         public int Rows => _config.Rows;
         public int Columns => _config.Columns;
@@ -17,7 +18,7 @@ namespace ConsoleApp.GameEngine
         public GameBoard(GameConfiguration config)
         {
             _config = config;
-            _board = new int[config.Rows, config.Columns];  // Initialize empty board (all 0s)
+            _board = new int[config.Rows, config.Columns]; // Initialize empty board (all 0s)
         }
 
         // Display board in console with ASCII art
@@ -25,10 +26,10 @@ namespace ConsoleApp.GameEngine
         {
             // Header: "Classic - Normal Mode"
             Console.WriteLine($"\n  {_config.Name} - {(_config.IsCylinder ? "Cylinder Mode" : "Normal Mode")}");
-            
+
             // Column numbers: "  1 2 3 4 5 6 7"
             Console.WriteLine("  " + string.Join(" ", Enumerable.Range(1, Columns)));
-            
+
             // Top border: " +-------------+"
             Console.WriteLine(" +" + new string('-', Columns * 2 - 1) + "+");
 
@@ -41,13 +42,14 @@ namespace ConsoleApp.GameEngine
                     // Convert board value to symbol
                     char symbol = _board[row, col] switch
                     {
-                        1 => 'X',    // Player 1
-                        2 => 'O',    // Player 2
-                        _ => ' '     // Empty
+                        1 => 'X', // Player 1
+                        2 => 'O', // Player 2
+                        _ => ' ' // Empty
                     };
                     Console.Write(symbol);
-                    if (col < Columns - 1) Console.Write(" ");  // Space between columns
+                    if (col < Columns - 1) Console.Write(" "); // Space between columns
                 }
+
                 Console.WriteLine("|");
             }
 
@@ -78,7 +80,7 @@ namespace ConsoleApp.GameEngine
             {
                 if (_board[row, column] == 0)
                 {
-                    _board[row, column] = player;  // Place piece
+                    _board[row, column] = player; // Place piece
                     return true;
                 }
             }
@@ -94,27 +96,27 @@ namespace ConsoleApp.GameEngine
             // Check all 4 directions from every cell
             // Horizontal (→)
             for (int row = 0; row < Rows; row++)
-            for (int col = 0; col < Columns; col++)
-                if (CheckLine(row, col, 0, 1, player, winLength))
-                    return true;
+                for (int col = 0; col < Columns; col++)
+                    if (CheckLine(row, col, 0, 1, player, winLength))
+                        return true;
 
             // Vertical (↓)
             for (int row = 0; row < Rows; row++)
-            for (int col = 0; col < Columns; col++)
-                if (CheckLine(row, col, 1, 0, player, winLength))
-                    return true;
+                for (int col = 0; col < Columns; col++)
+                    if (CheckLine(row, col, 1, 0, player, winLength))
+                        return true;
 
             // Diagonal (↘)
             for (int row = 0; row < Rows; row++)
-            for (int col = 0; col < Columns; col++)
-                if (CheckLine(row, col, 1, 1, player, winLength))
-                    return true;
+                for (int col = 0; col < Columns; col++)
+                    if (CheckLine(row, col, 1, 1, player, winLength))
+                        return true;
 
             // Diagonal (↙)
             for (int row = 0; row < Rows; row++)
-            for (int col = 0; col < Columns; col++)
-                if (CheckLine(row, col, -1, 1, player, winLength))
-                    return true;
+                for (int col = 0; col < Columns; col++)
+                    if (CheckLine(row, col, -1, 1, player, winLength))
+                        return true;
 
             return false;
         }
@@ -149,7 +151,7 @@ namespace ConsoleApp.GameEngine
                     return false;
             }
 
-            return true;  // All cells in line match player
+            return true; // All cells in line match player
         }
 
         // Check if board is full (draw condition)
@@ -161,7 +163,7 @@ namespace ConsoleApp.GameEngine
                     return false;
             return true;
         }
-        
+
         // Get copy of board state (for AI simulation)
         // Clone prevents AI from modifying actual board
         public int[,] GetBoardState()
@@ -177,7 +179,7 @@ namespace ConsoleApp.GameEngine
             {
                 throw new ArgumentException("Board state dimensions don't match configuration");
             }
-    
+
             // Copy state to board
             for (int row = 0; row < Rows; row++)
             {

@@ -1,6 +1,7 @@
+using ConsoleApp.GameEngine.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace ConsoleApp.GameEngine
+namespace ConsoleApp.GameEngine.Storage.Database
 {
     // Database context - bridge between C# and SQLite database
     public class AppDbContext : DbContext

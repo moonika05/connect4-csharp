@@ -1,7 +1,6 @@
-using System;
 using System.Text.Json.Serialization;
 
-namespace ConsoleApp.GameEngine
+namespace ConsoleApp.GameEngine.Models
 {
     // Game configuration - board size, win condition, cylinder mode
     // Represents game rules/settings (not game state)

@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace ConsoleApp.GameEngine
+namespace ConsoleApp.GameEngine.Models
 {
     // Database model for game configurations
     // Entity Framework maps this to "GameConfigurations" table

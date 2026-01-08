@@ -1,4 +1,5 @@
 ﻿@page
+@using ConsoleApp.GameEngine.Models
 @model WebApp.Pages.Game.PlayModel
 @{
     ViewData["Title"] = "Play Connect4";
@@ -164,8 +165,8 @@
 </style>
 
 @* Auto-refresh for AI vs AI *@
-@if (Model.Player1Type != ConsoleApp.GameEngine.PlayerType.Human && 
-     Model.Player2Type != ConsoleApp.GameEngine.PlayerType.Human && 
+@if (Model.Player1Type != PlayerType.Human && 
+     Model.Player2Type != PlayerType.Human && 
      !Model.IsGameOver)
 {
     <script>

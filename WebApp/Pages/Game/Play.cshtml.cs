@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using ConsoleApp.GameEngine;
 using WebApp.Helpers;
 using System.Text.Json;
+using ConsoleApp.GameEngine.Models;
+using ConsoleApp.GameEngine.Storage.Database;
 
 namespace WebApp.Pages.Game
 {

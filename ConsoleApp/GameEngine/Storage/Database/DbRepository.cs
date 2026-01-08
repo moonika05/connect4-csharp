@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using ConsoleApp.GameEngine.Models;
+using ConsoleApp.GameEngine.Storage.Json;
 using Microsoft.EntityFrameworkCore;
 
-namespace ConsoleApp.GameEngine
+namespace ConsoleApp.GameEngine.Storage.Database
 {
     // Database repository implementation using Entity Framework + SQLite
     // IGameRepository implementation for database storage (alternative to JSON files)

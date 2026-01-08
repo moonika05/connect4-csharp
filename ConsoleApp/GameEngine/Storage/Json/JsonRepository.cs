@@ -4,8 +4,10 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ConsoleApp.GameEngine.Models;
+using ConsoleApp.GameEngine.Storage.Database;
 
-namespace ConsoleApp.GameEngine
+namespace ConsoleApp.GameEngine.Storage.Json
 {
     // JSON file-based repository implementation
     // Saves games and configs as JSON files in "saves/" folder

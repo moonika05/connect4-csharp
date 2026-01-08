@@ -1,4 +1,4 @@
-namespace ConsoleApp.GameEngine
+namespace ConsoleApp.GameEngine.Models
 {
     public enum PlayerType
     {

@@ -2,7 +2,7 @@ using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace ConsoleApp.GameEngine
+namespace ConsoleApp.GameEngine.Storage.Database
 {
     // Database model for saved games - maps to "GameStates" table
     // Stores complete game state: board, players, configuration

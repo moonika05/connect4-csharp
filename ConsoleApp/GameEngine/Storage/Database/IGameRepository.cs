@@ -1,6 +1,7 @@
 using System.Collections.Generic;
+using ConsoleApp.GameEngine.Models;
 
-namespace ConsoleApp.GameEngine
+namespace ConsoleApp.GameEngine.Storage.Database
 {
     public interface IGameRepository
     {

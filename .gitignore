@@ -465,4 +465,4 @@ FodyWeavers.xsd
 *.msi
 *.msix
 *.msm
-*.msp
+*.msp.DS_Store
