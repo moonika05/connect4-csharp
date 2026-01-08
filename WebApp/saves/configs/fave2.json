@@ -1,7 +1,7 @@
 {
   "Name": "fave2",
-  "Rows": 5,
-  "Columns": 6,
+  "Rows": 7,
+  "Columns": 7,
   "WinCondition": 4,
-  "IsCylinder": false
+  "IsCylinder": true
 }

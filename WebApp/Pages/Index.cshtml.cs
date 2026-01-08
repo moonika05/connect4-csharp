@@ -5,12 +5,13 @@ using WebApp.Helpers;
 using System.Text.Json;
 using ConsoleApp.GameEngine.Models;
 using ConsoleApp.GameEngine.Storage.Database;
+using ConsoleApp.GameEngine.Storage.Json;
 
 namespace WebApp.Pages
 {
     public class IndexModel : PageModel
     {
-        private readonly IGameRepository _repository;
+        private IGameRepository _repository;
 
         public IndexModel(IGameRepository repository)
         {
@@ -20,13 +21,21 @@ namespace WebApp.Pages
         public List<string> SavedGames { get; set; } = new();
         public List<string> SavedConfigs { get; set; } = new();
         public GameConfiguration? LoadedConfig { get; set; }
+        public string CurrentRepository { get; set; } = "Json";
 
         public void OnGet()
         {
+            // Get current repository type from session (default: Json)
+            CurrentRepository = HttpContext.Session.GetString("RepositoryType") ?? "Json";
+            
+            // Update repository instance based on session
+            UpdateRepository();
+            
+            // Load saved games and configs
             SavedGames = _repository.GetAllSavedGames();
             SavedConfigs = _repository.GetAllSavedConfigurations();
-            
-            // Check if there's a loaded config in session
+
+            // Load configuration from session if exists
             try
             {
                 var configData = HttpContext.Session.GetObject<JsonElement>("GameConfiguration");
@@ -43,131 +52,176 @@ namespace WebApp.Pages
             }
             catch
             {
-                // No loaded config
+                LoadedConfig = null;
             }
         }
 
-        public IActionResult OnPostNewGame(string player1Type, string player2Type, 
-            int rows = 6, int columns = 7, int winCondition = 4, 
-            string? isCylinder = null)
+        // NEW: Set repository type
+        public IActionResult OnPostSetRepository(string repositoryType)
         {
-            // CLEAR OLD GAME from session!
-            HttpContext.Session.Remove("CurrentGame");
-    
-            // Store player types in session
+            // Save repository type to session
+            HttpContext.Session.SetString("RepositoryType", repositoryType);
+            
+            TempData["SuccessMessage"] = $"Storage method changed to: {repositoryType}";
+            return RedirectToPage();
+        }
+
+        public IActionResult OnPostNewGame(string player1Type, string player2Type, 
+            int rows, int columns, int winCondition, bool isCylinder = false)
+        {
+            Console.WriteLine($"\n========== OnPostNewGame ==========");
+            Console.WriteLine($"Starting NEW game - clearing old session data");
+            
+            // Or clear everything:
+            HttpContext.Session.Clear();
+            
+            // Validate
+            if (rows < 4 || rows > 10)
+            {
+                TempData["ErrorMessage"] = "Rows must be between 4-10!";
+                return RedirectToPage();
+            }
+            
+            if (columns < 4 || columns > 10)
+            {
+                TempData["ErrorMessage"] = "Columns must be between 4-10!";
+                return RedirectToPage();
+            }
+            
+            if (winCondition < 3 || winCondition > 7)
+            {
+                TempData["ErrorMessage"] = "Win condition must be between 3-7!";
+                return RedirectToPage();
+            }
+
+            // Save NEW game settings
             HttpContext.Session.SetString("Player1Type", player1Type);
             HttpContext.Session.SetString("Player2Type", player2Type);
-    
-            // Parse cylinder - checkbox sends "on" when checked, null when not checked
-            bool cylinderMode = isCylinder == "on" || isCylinder == "true";
-    
-            Console.WriteLine($"=== New Game Config === Rows:{rows}, Cols:{columns}, Win:{winCondition}, Cylinder:{cylinderMode} (raw:{isCylinder})");
-    
-            // Store configuration in session
-            var config = new GameConfiguration("Custom", rows, columns, winCondition, cylinderMode);
-            Console.WriteLine($"=== SAVED CONFIG === Name:{config.Name}, Cylinder:{config.IsCylinder}");  // <-- LISA SEE RIDA SIIA
-            HttpContext.Session.SetObject("GameConfiguration", config);
-    
+            TempData["Player1Type"] = player1Type;
+            TempData["Player2Type"] = player2Type;
+
+            var config = new GameConfiguration("Custom", rows, columns, winCondition, isCylinder);
+            
+            Console.WriteLine($"Config.IsCylinder: {config.IsCylinder}");
+            
+            // Save config
+            HttpContext.Session.SetString("Config_Name", config.Name);
+            HttpContext.Session.SetInt32("Config_Rows", config.Rows);
+            HttpContext.Session.SetInt32("Config_Columns", config.Columns);
+            HttpContext.Session.SetInt32("Config_WinCondition", config.WinCondition);
+            HttpContext.Session.SetString("Config_IsCylinder", config.IsCylinder.ToString());
+            
+            // ALSO save to TempData
+            TempData["Config_Name"] = config.Name;
+            TempData["Config_Rows"] = config.Rows;
+            TempData["Config_Columns"] = config.Columns;
+            TempData["Config_WinCondition"] = config.WinCondition;
+            TempData["Config_IsCylinder"] = config.IsCylinder.ToString();
+            
+            Console.WriteLine($"New game session created");
+
             return RedirectToPage("/Game/Play");
         }
 
         public IActionResult OnPostLoadGame(string gameName)
         {
-            if (string.IsNullOrEmpty(gameName))
-                return Page();
-
+            UpdateRepository();
+            
             var state = _repository.LoadGame(gameName);
             if (state == null)
             {
-                TempData["ErrorMessage"] = "Failed to load game!";
+                TempData["ErrorMessage"] = $"Failed to load game: {gameName}";
                 return RedirectToPage();
             }
 
-            // Clear old game and load this one
-            HttpContext.Session.Remove("CurrentGame");
-            
-            // Store loaded game state
-            var gameData = new
+            // Save to session
+            HttpContext.Session.SetObject("CurrentGame", new
             {
                 Config = state.Configuration,
-                Board = state.Board,
-                CurrentPlayer = state.CurrentPlayer,
-                IsGameOver = state.IsGameOver,
-                Winner = state.Winner,
-                GameId = state.GameId,
-                Player1Type = PlayerType.Human, // Default for loaded games
+                state.Board,
+                state.CurrentPlayer,
+                state.IsGameOver,
+                state.Winner,
+                state.GameId,
+                Player1Type = PlayerType.Human,
                 Player2Type = PlayerType.Human
-            };
-            
-            HttpContext.Session.SetObject("CurrentGame", gameData);
-            
+            });
+
+            HttpContext.Session.SetString("Player1Type", "Human");
+            HttpContext.Session.SetString("Player2Type", "Human");
+
+            TempData["SuccessMessage"] = $"Game '{gameName}' loaded!";
             return RedirectToPage("/Game/Play");
         }
 
         public IActionResult OnPostDeleteGame(string gameName)
         {
-            if (string.IsNullOrEmpty(gameName))
-                return RedirectToPage();
-
-            try
+            UpdateRepository();
+            
+            if (_repository.DeleteGame(gameName))
             {
-                _repository.DeleteGame(gameName);
                 TempData["SuccessMessage"] = $"Game '{gameName}' deleted!";
             }
-            catch (Exception ex)
+            else
             {
-                TempData["ErrorMessage"] = $"Failed to delete game: {ex.Message}";
+                TempData["ErrorMessage"] = $"Failed to delete game: {gameName}";
             }
-            
             return RedirectToPage();
-            }
+        }
 
         public IActionResult OnPostLoadConfig(string configName)
         {
-            if (string.IsNullOrEmpty(configName))
-                return RedirectToPage();
-
+            UpdateRepository();
+            
             var config = _repository.LoadConfiguration(configName);
             if (config == null)
             {
-                TempData["ErrorMessage"] = "Failed to load configuration!";
+                TempData["ErrorMessage"] = $"Failed to load configuration: {configName}";
                 return RedirectToPage();
             }
 
-            // Store configuration in session
             HttpContext.Session.SetObject("GameConfiguration", config);
-            
-            TempData["SuccessMessage"] = $"Configuration '{config.Name}' loaded! ({config.Rows}x{config.Columns}, Win:{config.WinCondition}, {(config.IsCylinder ? "Cylinder" : "Rectangle")})";
-            
-            return RedirectToPage(); // Stay on Index page
+            TempData["SuccessMessage"] = $"Configuration '{config.Name}' loaded!";
+            return RedirectToPage();
         }
 
         public IActionResult OnPostDeleteConfig(string configName)
         {
-            if (string.IsNullOrEmpty(configName))
-                return RedirectToPage();
-
-            try
+            UpdateRepository();
+            
+            if (_repository.DeleteConfiguration(configName))
             {
-                _repository.DeleteConfiguration(configName);
                 TempData["SuccessMessage"] = $"Configuration '{configName}' deleted!";
             }
-            catch (Exception ex)
+            else
             {
-                TempData["ErrorMessage"] = $"Failed to delete configuration: {ex.Message}";
+                TempData["ErrorMessage"] = $"Failed to delete configuration: {configName}";
             }
-            
             return RedirectToPage();
         }
 
         public IActionResult OnPostClearConfig()
         {
-            // Remove loaded config from session
             HttpContext.Session.Remove("GameConfiguration");
-            
-            TempData["SuccessMessage"] = "Reset to Classic configuration!";
-            
+            TempData["SuccessMessage"] = "Configuration reset to Classic!";
             return RedirectToPage();
+        }
+
+        // Update repository instance based on session
+        private void UpdateRepository()
+        {
+            var repositoryType = HttpContext.Session.GetString("RepositoryType") ?? "Json";
+            
+            if (repositoryType == "Database")
+            {
+                _repository = new DbRepository();
+            }
+            else
+            {
+                _repository = new JsonRepository();
+            }
+            
+            CurrentRepository = repositoryType;
         }
     }
 }

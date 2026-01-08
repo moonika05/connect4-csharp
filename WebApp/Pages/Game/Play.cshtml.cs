@@ -11,6 +11,10 @@ namespace WebApp.Pages.Game
     public class PlayModel : PageModel
     {
         private readonly IGameRepository _repository;
+        
+        // Static dictionary for in-memory game storage (shared across all users)
+        private static readonly Dictionary<string, GameState> _activeGames = new();
+        private static readonly object _lock = new object();
 
         public PlayModel(IGameRepository repository)
         {
@@ -27,31 +31,43 @@ namespace WebApp.Pages.Game
         public PlayerType Player2Type { get; set; } = PlayerType.Human;
         public string? ErrorMessage { get; set; }
         public string? AiThinking { get; set; }
+        public string? ShareableLink { get; set; }
 
         public void OnGet(string? gameId = null, long? nocache = null)
         {
             Console.WriteLine($"=== OnGet CALLED === gameId: {gameId}, nocache: {nocache}");
             
-            // Check if we have game in session
-            var sessionData = HttpContext.Session.GetString("CurrentGame");
-            Console.WriteLine($"Session data exists: {!string.IsNullOrEmpty(sessionData)}");
-            
+            // PRIORITY 1: Load from in-memory storage (multiplayer)
             if (!string.IsNullOrEmpty(gameId))
             {
-                LoadGameFromSession();
+                Console.WriteLine($"Loading game from memory: {gameId}");
+                LoadGameFromMemory(gameId);
+                
+                // Generate shareable link
+                ShareableLink = $"{Request.Scheme}://{Request.Host}/Game/Play?gameId={GameId}";
+                
+                // CRITICAL: Do NOT load from session after loading from memory!
+                // Session might have old data that would overwrite memory
             }
             else
             {
+                // PRIORITY 2: Load from session (single player OR new game)
                 LoadGameFromSession();
+                
+                // Add to memory if game exists (for potential sharing)
+                if (!string.IsNullOrEmpty(GameId))
+                {
+                    SaveGameToMemory();
+                    ShareableLink = $"{Request.Scheme}://{Request.Host}/Game/Play?gameId={GameId}";
+                }
             }
             
-            // Load error message from TempData if exists
             if (TempData["ErrorMessage"] != null)
             {
                 ErrorMessage = TempData["ErrorMessage"]?.ToString();
             }
             
-            // AI vs AI - make ONE move only (then JavaScript will refresh)
+            // AI vs AI - make ONE move only
             if (Player1Type != PlayerType.Human && Player2Type != PlayerType.Human && !IsGameOver)
             {
                 Console.WriteLine("=== AI vs AI mode - making one move ===");
@@ -60,29 +76,37 @@ namespace WebApp.Pages.Game
                 board.LoadBoardState(Board);
                 
                 MakeAIMove(board);
+                
+                // Save to memory and session
+                SaveGameToMemory();
                 SaveGameToSession();
                 
                 Console.WriteLine($"AI move completed. Game over: {IsGameOver}");
             }
             
             // DEBUG
-            Console.WriteLine($"OnGet - Board state:");
-            for (int row = 0; row < Config.Rows; row++)
-            {
-                for (int col = 0; col < Config.Columns; col++)
-                {
-                    Console.Write(Board[row, col] + " ");
-                }
-                Console.WriteLine();
-            }
-            Console.WriteLine($"Current Player: {CurrentPlayer}");
-            Console.WriteLine($"Player1Type: {Player1Type}, Player2Type: {Player2Type}");
+            Console.WriteLine($"OnGet - Current Player: {CurrentPlayer}");
+            Console.WriteLine($"Active games in memory: {_activeGames.Count}");
         }
 
         public IActionResult OnPostMove(int column)
         {
             Console.WriteLine($"\n=== OnPostMove CALLED === column: {column}");
-            LoadGameFromSession();
+            
+            // Check if multiplayer (gameId in URL)
+            var gameId = Request.Query["gameId"].ToString();
+            
+            if (!string.IsNullOrEmpty(gameId))
+            {
+                // MULTIPLAYER: Load from memory
+                Console.WriteLine($"Multiplayer mode - loading from memory: {gameId}");
+                LoadGameFromMemory(gameId);
+            }
+            else
+            {
+                // Single player: Load from session
+                LoadGameFromSession();
+            }
             
             Console.WriteLine($"BEFORE move - CurrentPlayer: {CurrentPlayer}");
 
@@ -90,7 +114,7 @@ namespace WebApp.Pages.Game
             {
                 ErrorMessage = "Game is already over!";
                 TempData["ErrorMessage"] = ErrorMessage;
-                return RedirectToPage(new { nocache = DateTime.Now.Ticks });
+                return RedirectToPage(new { gameId = GameId, nocache = DateTime.Now.Ticks });
             }
 
             var board = new GameBoard(Config);
@@ -108,18 +132,26 @@ namespace WebApp.Pages.Game
                     IsGameOver = true;
                     PlayerType winnerType = CurrentPlayer == 1 ? Player1Type : Player2Type;
                     Winner = $"Player {CurrentPlayer} ({winnerType})";
+                    
+                    // Save to memory and session (NOT database)
+                    SaveGameToMemory();
                     SaveGameToSession();
+                    
                     Console.WriteLine($"HUMAN WON! Redirecting...");
-                    return RedirectToPage(new { nocache = DateTime.Now.Ticks });
+                    return RedirectToPage(new { gameId = GameId, nocache = DateTime.Now.Ticks });
                 }
                 
                 if (board.IsFull())
                 {
                     IsGameOver = true;
                     Winner = "Draw";
+                    
+                    // Save to memory and session (NOT database)
+                    SaveGameToMemory();
                     SaveGameToSession();
+                    
                     Console.WriteLine($"DRAW! Redirecting...");
-                    return RedirectToPage(new { nocache = DateTime.Now.Ticks });
+                    return RedirectToPage(new { gameId = GameId, nocache = DateTime.Now.Ticks });
                 }
 
                 // Switch player
@@ -140,28 +172,40 @@ namespace WebApp.Pages.Game
                     Console.WriteLine($"AI turn completed");
                 }
 
+                // Save to memory and session (NOT database)
+                SaveGameToMemory();
                 SaveGameToSession();
-                Console.WriteLine($"Game saved to session. Redirecting...");
-                return RedirectToPage(new { nocache = DateTime.Now.Ticks });
+                
+                Console.WriteLine($"Game saved to memory. Redirecting...");
+                return RedirectToPage(new { gameId = GameId, nocache = DateTime.Now.Ticks });
             }
             else
             {
                 ErrorMessage = "Invalid move! Column is full.";
                 TempData["ErrorMessage"] = ErrorMessage;
                 Console.WriteLine($"Invalid move! Redirecting...");
-                return RedirectToPage(new { nocache = DateTime.Now.Ticks });
+                return RedirectToPage(new { gameId = GameId, nocache = DateTime.Now.Ticks });
             }
         }
 
         public IActionResult OnPostSaveGame(string saveName)
         {
-            LoadGameFromSession();
+            // Check if multiplayer
+            var gameId = Request.Query["gameId"].ToString();
+            if (!string.IsNullOrEmpty(gameId))
+            {
+                LoadGameFromMemory(gameId);
+            }
+            else
+            {
+                LoadGameFromSession();
+            }
 
             if (string.IsNullOrWhiteSpace(saveName))
             {
                 ErrorMessage = "Please enter a save name!";
                 TempData["ErrorMessage"] = ErrorMessage;
-                return RedirectToPage(new { nocache = DateTime.Now.Ticks });
+                return RedirectToPage(new { gameId = GameId, nocache = DateTime.Now.Ticks });
             }
 
             var state = new GameState(
@@ -174,10 +218,11 @@ namespace WebApp.Pages.Game
                 Winner
             );
 
+            // NOW save to database (user requested)
             _repository.SaveGame(state, $"{saveName}.json");
             
             TempData["SuccessMessage"] = $"Game saved as '{saveName}'!";
-            return RedirectToPage(new { nocache = DateTime.Now.Ticks });
+            return RedirectToPage(new { gameId = GameId, nocache = DateTime.Now.Ticks });
         }
 
         public IActionResult OnPostSaveConfig(string configName)
@@ -188,12 +233,11 @@ namespace WebApp.Pages.Game
             {
                 ErrorMessage = "Please enter a config name!";
                 TempData["ErrorMessage"] = ErrorMessage;
-                return RedirectToPage(new { nocache = DateTime.Now.Ticks });
+                return RedirectToPage(new { gameId = GameId, nocache = DateTime.Now.Ticks });
             }
 
             try
             {
-                // Save current configuration with custom name
                 var namedConfig = new GameConfiguration(
                     configName,
                     Config.Rows,
@@ -211,53 +255,125 @@ namespace WebApp.Pages.Game
                 TempData["ErrorMessage"] = $"Failed to save configuration: {ex.Message}";
             }
             
-            return RedirectToPage(new { nocache = DateTime.Now.Ticks });
+            return RedirectToPage(new { gameId = GameId, nocache = DateTime.Now.Ticks });
         }
 
-        public IActionResult OnPostNewGame()
+        public IActionResult OnPostNewGame(string player1Type, string player2Type, 
+            int rows, int columns, int winCondition, bool isCylinder = false)
         {
-            HttpContext.Session.Clear();
-            return RedirectToPage("/Index");
+            Console.WriteLine($"=== OnPostNewGame CALLED ===");
+            Console.WriteLine($"isCylinder: {isCylinder}");
+    
+            // Validate
+            if (rows < 4 || rows > 10)
+            {
+                TempData["ErrorMessage"] = "Rows must be between 4-10!";
+                return RedirectToPage();
+            }
+    
+            if (columns < 4 || columns > 10)
+            {
+                TempData["ErrorMessage"] = "Columns must be between 4-10!";
+                return RedirectToPage();
+            }
+    
+            if (winCondition < 3 || winCondition > 7)
+            {
+                TempData["ErrorMessage"] = "Win condition must be between 3-7!";
+                return RedirectToPage();
+            }
+
+            // Save player types to session
+            HttpContext.Session.SetString("Player1Type", player1Type);
+            HttpContext.Session.SetString("Player2Type", player2Type);
+
+            // Create configuration
+            var config = new GameConfiguration("Custom", rows, columns, winCondition, isCylinder);
+    
+            Console.WriteLine($"=== Config created ===");
+            Console.WriteLine($"Config.IsCylinder: {config.IsCylinder}");
+    
+            // Save configuration as individual session keys (MORE RELIABLE)
+            HttpContext.Session.SetString("Config_Name", config.Name);
+            HttpContext.Session.SetInt32("Config_Rows", config.Rows);
+            HttpContext.Session.SetInt32("Config_Columns", config.Columns);
+            HttpContext.Session.SetInt32("Config_WinCondition", config.WinCondition);
+            HttpContext.Session.SetString("Config_IsCylinder", config.IsCylinder.ToString());
+    
+            Console.WriteLine($"=== Saved to session ===");
+            Console.WriteLine($"Config_IsCylinder: {HttpContext.Session.GetString("Config_IsCylinder")}");
+
+            return RedirectToPage("/Game/Play");
         }
 
         private void InitializeNewGame()
         {
-            Console.WriteLine("=== InitializeNewGame called ===");
+            Console.WriteLine("\n========== InitializeNewGame ==========");
             
-            // Get player types from session
-            var p1Type = HttpContext.Session.GetString("Player1Type");
-            var p2Type = HttpContext.Session.GetString("Player2Type");
+            // Try Session first, then TempData as fallback
+            var p1Type = HttpContext.Session.GetString("Player1Type") ?? TempData["Player1Type"]?.ToString();
+            var p2Type = HttpContext.Session.GetString("Player2Type") ?? TempData["Player2Type"]?.ToString();
             
-            Console.WriteLine($"Player types from session: P1={p1Type}, P2={p2Type}");
+            Console.WriteLine($"Player types: P1={p1Type}, P2={p2Type}");
 
             Player1Type = Enum.TryParse<PlayerType>(p1Type, out var pt1) ? pt1 : PlayerType.Human;
             Player2Type = Enum.TryParse<PlayerType>(p2Type, out var pt2) ? pt2 : PlayerType.Human;
 
-            // Get configuration from session (or use default)
-            try
+            // Try Session first, then TempData
+            var configName = HttpContext.Session.GetString("Config_Name") ?? TempData["Config_Name"]?.ToString();
+            
+            var configRows = HttpContext.Session.GetInt32("Config_Rows");
+            if (configRows == null && TempData["Config_Rows"] != null)
             {
-                var configData = HttpContext.Session.GetObject<JsonElement>("GameConfiguration");
-                if (configData.ValueKind != JsonValueKind.Undefined)
-                {
-                    Config = new GameConfiguration(
-                        configData.GetProperty("Name").GetString() ?? "Custom",
-                        configData.GetProperty("Rows").GetInt32(),
-                        configData.GetProperty("Columns").GetInt32(),
-                        configData.GetProperty("WinCondition").GetInt32(),
-                        configData.GetProperty("IsCylinder").GetBoolean()
-                    );
-                    Console.WriteLine($"Loaded custom config: {Config.Rows}x{Config.Columns}, Win:{Config.WinCondition}, Cylinder:{Config.IsCylinder}");
-                }
-                else
-                {
-                    Config = GameConfiguration.Classic();
-                    Console.WriteLine("Using default Classic configuration");
-                }
+                configRows = int.Parse(TempData["Config_Rows"].ToString()!);
             }
-            catch
+            
+            var configColumns = HttpContext.Session.GetInt32("Config_Columns");
+            if (configColumns == null && TempData["Config_Columns"] != null)
+            {
+                configColumns = int.Parse(TempData["Config_Columns"].ToString()!);
+            }
+            
+            var configWinCondition = HttpContext.Session.GetInt32("Config_WinCondition");
+            if (configWinCondition == null && TempData["Config_WinCondition"] != null)
+            {
+                configWinCondition = int.Parse(TempData["Config_WinCondition"].ToString()!);
+            }
+            
+            var configIsCylinderStr = HttpContext.Session.GetString("Config_IsCylinder") ?? TempData["Config_IsCylinder"]?.ToString();
+            
+            Console.WriteLine($"Reading from session/tempdata:");
+            Console.WriteLine($"  - Config_Name: {configName}");
+            Console.WriteLine($"  - Config_Rows: {configRows}");
+            Console.WriteLine($"  - Config_Columns: {configColumns}");
+            Console.WriteLine($"  - Config_WinCondition: {configWinCondition}");
+            Console.WriteLine($"  - Config_IsCylinder: '{configIsCylinderStr}'");
+            
+            if (configRows.HasValue && configColumns.HasValue && configWinCondition.HasValue && !string.IsNullOrEmpty(configIsCylinderStr))
+            {
+                bool isCylinder = bool.Parse(configIsCylinderStr);
+                Console.WriteLine($"  - Parsed isCylinder: {isCylinder}");
+                
+                Config = new GameConfiguration(
+                    configName ?? "Custom",
+                    configRows.Value,
+                    configColumns.Value,
+                    configWinCondition.Value,
+                    isCylinder
+                );
+                
+                Console.WriteLine($"Config object created:");
+                Console.WriteLine($"  - Config.Name: {Config.Name}");
+                Console.WriteLine($"  - Config.Rows: {Config.Rows}");
+                Console.WriteLine($"  - Config.Columns: {Config.Columns}");
+                Console.WriteLine($"  - Config.WinCondition: {Config.WinCondition}");
+                Console.WriteLine($"  - Config.IsCylinder: {Config.IsCylinder}");
+            }
+            else
             {
                 Config = GameConfiguration.Classic();
-                Console.WriteLine("Failed to load config, using Classic");
+                Console.WriteLine("Using default Classic configuration");
+                Console.WriteLine($"  WHY? configRows: {configRows}, configColumns: {configColumns}, configWinCondition: {configWinCondition}, configIsCylinderStr: '{configIsCylinderStr}'");
             }
 
             Board = new int[Config.Rows, Config.Columns];
@@ -266,15 +382,22 @@ namespace WebApp.Pages.Game
             Winner = null;
             GameId = Guid.NewGuid().ToString();
 
+            // Save to memory and session
+            SaveGameToMemory();
             SaveGameToSession();
-            Console.WriteLine($"New game initialized: P1={Player1Type}, P2={Player2Type}");
+            
+            Console.WriteLine($"\nFINAL STATE:");
+            Console.WriteLine($"  - Board: {Config.Rows}x{Config.Columns}");
+            Console.WriteLine($"  - Cylinder: {Config.IsCylinder}");
+            Console.WriteLine($"  - Players: P1={Player1Type}, P2={Player2Type}");
+            Console.WriteLine($"==========================================\n");
 
-            // If Player 1 is AI, make first move
             if (Player1Type != PlayerType.Human)
             {
                 Console.WriteLine("Player 1 is AI, making first move...");
                 var board = new GameBoard(Config);
                 MakeAIMove(board);
+                SaveGameToMemory();
                 SaveGameToSession();
             }
         }
@@ -284,7 +407,6 @@ namespace WebApp.Pages.Game
             PlayerType aiType = CurrentPlayer == 1 ? Player1Type : Player2Type;
             var ai = new GameAI(Config, GetAIDifficulty(aiType));
 
-            // Get current board state for AI
             int[,] currentBoard = board.GetBoardState();
             int column = ai.GetBestMove(currentBoard, CurrentPlayer);
             
@@ -327,118 +449,202 @@ namespace WebApp.Pages.Game
             };
         }
 
+        // NEW: Save to in-memory storage (thread-safe)
+        private void SaveGameToMemory()
+        {
+            lock (_lock)
+            {
+                var state = new GameState(
+                    GameId,
+                    DateTime.Now,
+                    Config,
+                    Board,
+                    CurrentPlayer,
+                    IsGameOver,
+                    Winner
+                );
+                
+                _activeGames[GameId] = state;
+                Console.WriteLine($"=== SAVED to memory === GameId: {GameId}, Total games in memory: {_activeGames.Count}");
+            }
+        }
+
+        // Load from in-memory storage
+        private void LoadGameFromMemory(string gameId)
+        {
+            lock (_lock)
+            {
+                Console.WriteLine($"=== Loading from memory === GameId: {gameId}");
+                
+                if (_activeGames.TryGetValue(gameId, out var state))
+                {
+                    Config = state.Configuration;
+                    Board = state.Board;
+                    CurrentPlayer = state.CurrentPlayer;
+                    IsGameOver = state.IsGameOver;
+                    Winner = state.Winner;
+                    GameId = state.GameId;
+                    
+                    // Get player types from session or default
+                    var p1Type = HttpContext.Session.GetString("Player1Type");
+                    var p2Type = HttpContext.Session.GetString("Player2Type");
+                    Player1Type = Enum.TryParse<PlayerType>(p1Type, out var pt1) ? pt1 : PlayerType.Human;
+                    Player2Type = Enum.TryParse<PlayerType>(p2Type, out var pt2) ? pt2 : PlayerType.Human;
+                    
+                    // OLULINE: Uuenda ka session memory'st laetud andmetega!
+                    SaveGameToSession();
+                    
+                    Console.WriteLine($"=== LOADED from memory === GameId: {GameId}, CurrentPlayer: {CurrentPlayer}");
+                }
+                else
+                {
+                    // Game not in memory - try loading from database (saved games)
+                    Console.WriteLine($"Game not found in memory: {gameId}, trying database");
+                    var savedState = _repository.LoadGame($"{gameId}.json");
+                    
+                    if (savedState != null)
+                    {
+                        // Load from saved game
+                        Config = savedState.Configuration;
+                        Board = savedState.Board;
+                        CurrentPlayer = savedState.CurrentPlayer;
+                        IsGameOver = savedState.IsGameOver;
+                        Winner = savedState.Winner;
+                        GameId = savedState.GameId;
+                        
+                        var p1Type = HttpContext.Session.GetString("Player1Type");
+                        var p2Type = HttpContext.Session.GetString("Player2Type");
+                        Player1Type = Enum.TryParse<PlayerType>(p1Type, out var pt1) ? pt1 : PlayerType.Human;
+                        Player2Type = Enum.TryParse<PlayerType>(p2Type, out var pt2) ? pt2 : PlayerType.Human;
+                        
+                        // Add to memory for future access
+                        SaveGameToMemory();
+                        SaveGameToSession();
+                        
+                        Console.WriteLine($"=== LOADED from database and added to memory === GameId: {GameId}");
+                    }
+                    else
+                    {
+                        // Game doesn't exist anywhere - this is an error for multiplayer
+                        Console.WriteLine($"ERROR: Game {gameId} not found in memory or database!");
+                        TempData["ErrorMessage"] = "Game not found. It may have expired or been deleted.";
+                        
+                        // Don't initialize new game - redirect to home
+                        // This prevents overwriting another player's game
+                    }
+                }
+            }
+        }
+
         private void SaveGameToSession()
         {
-            var gameData = new
+            // Save config as individual keys
+            HttpContext.Session.SetString("Config_Name", Config.Name);
+            HttpContext.Session.SetInt32("Config_Rows", Config.Rows);
+            HttpContext.Session.SetInt32("Config_Columns", Config.Columns);
+            HttpContext.Session.SetInt32("Config_WinCondition", Config.WinCondition);
+            HttpContext.Session.SetString("Config_IsCylinder", Config.IsCylinder.ToString());
+    
+            // Save board as JSON
+            var options = new JsonSerializerOptions
             {
-                Config,
-                Board,
-                CurrentPlayer,
-                IsGameOver,
-                Winner,
-                GameId,
-                Player1Type,
-                Player2Type
+                Converters = { new WebApp.Helpers.MultiDimensionalArrayConverter() }
             };
+            string boardJson = JsonSerializer.Serialize(Board, options);
+            HttpContext.Session.SetString("Board", boardJson);
+    
+            // Save other game state
+            HttpContext.Session.SetInt32("CurrentPlayer", CurrentPlayer);
+            HttpContext.Session.SetString("IsGameOver", IsGameOver.ToString());
+            HttpContext.Session.SetString("Winner", Winner ?? "");
+            HttpContext.Session.SetString("GameId", GameId);
+            HttpContext.Session.SetString("Player1Type", Player1Type.ToString());
+            HttpContext.Session.SetString("Player2Type", Player2Type.ToString());
 
-            HttpContext.Session.SetObject("CurrentGame", gameData);
-            Console.WriteLine($"=== SAVED to session === CurrentPlayer: {CurrentPlayer}, P1Type: {Player1Type}, P2Type: {Player2Type}");
+            Console.WriteLine($"=== SAVED to session === CurrentPlayer: {CurrentPlayer}, IsCylinder: {Config.IsCylinder}");
         }
 
         private void LoadGameFromSession()
         {
-            var gameData = HttpContext.Session.GetObject<JsonElement>("CurrentGame");
+            // Check if there's an active game in session
+            var gameId = HttpContext.Session.GetString("GameId");
+            var boardJson = HttpContext.Session.GetString("Board");
             
-            if (gameData.ValueKind == JsonValueKind.Undefined)
+            Console.WriteLine($"=== LoadGameFromSession ===");
+            Console.WriteLine($"  GameId in session: {gameId}");
+            Console.WriteLine($"  Board in session: {!string.IsNullOrEmpty(boardJson)}");
+            
+            // If NO active game (GameId or Board missing) → initialize new
+            if (string.IsNullOrEmpty(gameId) || string.IsNullOrEmpty(boardJson))
             {
-                Console.WriteLine("=== No game in session, initializing new ===");
+                Console.WriteLine("=== No active game in session, initializing new ===");
                 InitializeNewGame();
                 return;
             }
-
-            try
+            
+            // Otherwise, load existing game
+            Console.WriteLine("=== Loading existing game from session ===");
+            
+            // Try to load config from individual keys
+            var configName = HttpContext.Session.GetString("Config_Name") ?? TempData["Config_Name"]?.ToString();
+            
+            var configRows = HttpContext.Session.GetInt32("Config_Rows");
+            if (configRows == null && TempData["Config_Rows"] != null)
             {
-                Console.WriteLine("=== Loading game from session ===");
-                
-                // Parse configuration
-                var configJson = gameData.GetProperty("Config");
+                configRows = int.Parse(TempData["Config_Rows"].ToString()!);
+            }
+            
+            var configColumns = HttpContext.Session.GetInt32("Config_Columns");
+            if (configColumns == null && TempData["Config_Columns"] != null)
+            {
+                configColumns = int.Parse(TempData["Config_Columns"].ToString()!);
+            }
+            
+            var configWinCondition = HttpContext.Session.GetInt32("Config_WinCondition");
+            if (configWinCondition == null && TempData["Config_WinCondition"] != null)
+            {
+                configWinCondition = int.Parse(TempData["Config_WinCondition"].ToString()!);
+            }
+            
+            var configIsCylinderStr = HttpContext.Session.GetString("Config_IsCylinder") ?? TempData["Config_IsCylinder"]?.ToString();
+            
+            if (configRows.HasValue && configColumns.HasValue && configWinCondition.HasValue)
+            {
+                // Load config
+                bool isCylinder = !string.IsNullOrEmpty(configIsCylinderStr) && bool.Parse(configIsCylinderStr);
                 Config = new GameConfiguration(
-                    configJson.GetProperty("Name").GetString() ?? "Classic",
-                    configJson.GetProperty("Rows").GetInt32(),
-                    configJson.GetProperty("Columns").GetInt32(),
-                    configJson.GetProperty("WinCondition").GetInt32(),
-                    configJson.GetProperty("IsCylinder").GetBoolean()
+                    configName ?? "Custom",
+                    configRows.Value,
+                    configColumns.Value,
+                    configWinCondition.Value,
+                    isCylinder
                 );
-
-                // Parse board
-                var boardJson = gameData.GetProperty("Board");
+                
+                // Load board
                 var options = new JsonSerializerOptions
                 {
                     Converters = { new WebApp.Helpers.MultiDimensionalArrayConverter() }
                 };
-                Board = JsonSerializer.Deserialize<int[,]>(boardJson.GetRawText(), options) ?? new int[6, 7];
+                Board = JsonSerializer.Deserialize<int[,]>(boardJson, options) ?? new int[Config.Rows, Config.Columns];
                 
-                Console.WriteLine($"Loaded board - checking cells:");
-                int pieceCount = 0;
-                for (int r = 0; r < Config.Rows; r++)
-                {
-                    for (int c = 0; c < Config.Columns; c++)
-                    {
-                        if (Board[r, c] != 0) pieceCount++;
-                    }
-                }
-                Console.WriteLine($"Total pieces on board: {pieceCount}");
-
-                CurrentPlayer = gameData.GetProperty("CurrentPlayer").GetInt32();
-                IsGameOver = gameData.GetProperty("IsGameOver").GetBoolean();
-                Winner = gameData.GetProperty("Winner").GetString();
-                GameId = gameData.GetProperty("GameId").GetString() ?? Guid.NewGuid().ToString();
-
-                // Parse PlayerType - can be either string or number
-                try
-                {
-                    var p1TypeValue = gameData.GetProperty("Player1Type");
-                    var p2TypeValue = gameData.GetProperty("Player2Type");
-                    
-                    if (p1TypeValue.ValueKind == JsonValueKind.String)
-                    {
-                        Player1Type = Enum.TryParse<PlayerType>(p1TypeValue.GetString(), out var pt1) ? pt1 : PlayerType.Human;
-                    }
-                    else if (p1TypeValue.ValueKind == JsonValueKind.Number)
-                    {
-                        Player1Type = (PlayerType)p1TypeValue.GetInt32();
-                    }
-                    else
-                    {
-                        Player1Type = PlayerType.Human;
-                    }
-                    
-                    if (p2TypeValue.ValueKind == JsonValueKind.String)
-                    {
-                        Player2Type = Enum.TryParse<PlayerType>(p2TypeValue.GetString(), out var pt2) ? pt2 : PlayerType.Human;
-                    }
-                    else if (p2TypeValue.ValueKind == JsonValueKind.Number)
-                    {
-                        Player2Type = (PlayerType)p2TypeValue.GetInt32();
-                    }
-                    else
-                    {
-                        Player2Type = PlayerType.Human;
-                    }
-                }
-                catch
-                {
-                    Console.WriteLine("Failed to parse PlayerTypes, defaulting to Human");
-                    Player1Type = PlayerType.Human;
-                    Player2Type = PlayerType.Human;
-                }
+                // Load other state
+                CurrentPlayer = HttpContext.Session.GetInt32("CurrentPlayer") ?? 1;
+                var isGameOverStr = HttpContext.Session.GetString("IsGameOver");
+                IsGameOver = !string.IsNullOrEmpty(isGameOverStr) && bool.Parse(isGameOverStr);
+                Winner = HttpContext.Session.GetString("Winner");
+                if (Winner == "") Winner = null;
+                GameId = gameId;
                 
-                Console.WriteLine($"=== LOADED from session === CurrentPlayer: {CurrentPlayer}, Pieces: {pieceCount}, P1: {Player1Type}, P2: {Player2Type}");
+                var p1TypeStr = HttpContext.Session.GetString("Player1Type") ?? TempData["Player1Type"]?.ToString();
+                var p2TypeStr = HttpContext.Session.GetString("Player2Type") ?? TempData["Player2Type"]?.ToString();
+                Player1Type = Enum.TryParse<PlayerType>(p1TypeStr, out var pt1) ? pt1 : PlayerType.Human;
+                Player2Type = Enum.TryParse<PlayerType>(p2TypeStr, out var pt2) ? pt2 : PlayerType.Human;
+                
+                Console.WriteLine($"=== LOADED existing game === CurrentPlayer: {CurrentPlayer}, IsCylinder: {Config.IsCylinder}");
             }
-            catch (Exception ex)
+            else
             {
-                Console.WriteLine($"=== Load FAILED === Error: {ex.Message}");
-                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                Console.WriteLine("=== Config missing, initializing new ===");
                 InitializeNewGame();
             }
         }

@@ -36,3 +36,15 @@ dotnet run
 - ASP.NET Core (Razor Pages)
 - Entity Framework Core (SQLite)
 - System.Text.Json
+
+## Multiplayer Support
+
+### How to play with another person:
+
+**Share Link (Real-time)**
+1. Start a new game (Human vs Human)
+2. Copy the shareable link at the top of the game page
+3. Send link to friend
+4. Both players open the same link
+5. Take turns making moves
+6. Click "🔄 Refresh Board" to see opponent's moves

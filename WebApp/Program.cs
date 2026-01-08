@@ -1,13 +1,11 @@
-using ConsoleApp.GameEngine;
 using ConsoleApp.GameEngine.Storage.Database;
 using ConsoleApp.GameEngine.Storage.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 builder.Services.AddRazorPages();
 
-// Add session support
+// Session support
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
 {
@@ -16,13 +14,11 @@ builder.Services.AddSession(options =>
     options.Cookie.IsEssential = true;
 });
 
-// Register repositories as services
+// Register repositories
 builder.Services.AddScoped<IGameRepository, JsonRepository>();
-// OR for database: builder.Services.AddScoped<IGameRepository, DbRepository>();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
@@ -36,8 +32,8 @@ app.UseRouting();
 
 app.UseAuthorization();
 
-// Enable session
-app.UseSession();
+// CRITICAL: UseSession MUST be AFTER UseRouting and BEFORE MapRazorPages!
+app.UseSession();  // <-- CHECK THIS IS HERE!
 
 app.MapRazorPages();
 

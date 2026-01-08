@@ -1,4 +1,5 @@
 ﻿@page
+@using ConsoleApp.GameEngine
 @using ConsoleApp.GameEngine.Models
 @model WebApp.Pages.Game.PlayModel
 @{
@@ -7,6 +8,19 @@
 
 <div class="container mt-4">
     <h1 class="text-center mb-4">🎮 Connect4</h1>
+
+    <!-- Shareable Link for Multiplayer -->
+    @if (!string.IsNullOrEmpty(Model.ShareableLink))
+    {
+        <div class="alert alert-success">
+            <strong>🔗 Share this game with another player:</strong>
+            <div class="input-group mt-2">
+                <input type="text" class="form-control" value="@Model.ShareableLink" readonly id="shareLink" />
+                <button class="btn btn-outline-secondary" onclick="copyLink()">📋 Copy Link</button>
+            </div>
+            <small class="text-muted">Share this link to play together in real-time! Both players can make moves and refresh to see updates.</small>
+        </div>
+    }
 
     <!-- Game Info -->
     <div class="row mb-3">
@@ -118,6 +132,15 @@
             </form>
         </div>
         <div class="col-md-6 text-end">
+            <!-- REFRESH BUTTON with gameId -->
+            <form method="get" style="display: inline;">
+                @if (!string.IsNullOrEmpty(Model.GameId))
+                {
+                    <input type="hidden" name="gameId" value="@Model.GameId" />
+                }
+                <button type="submit" class="btn btn-info mb-2">🔄 Refresh Board</button>
+            </form>
+            <br />
             <a asp-page="/Index" class="btn btn-secondary">🏠 Back to Home</a>
         </div>
     </div>
@@ -164,15 +187,33 @@
     }
 </style>
 
+<script>
+    // Copy link to clipboard
+    function copyLink() {
+        var copyText = document.getElementById("shareLink");
+        copyText.select();
+        copyText.setSelectionRange(0, 99999);
+        navigator.clipboard.writeText(copyText.value);
+        alert("Link copied! Share it with another player to play together.");
+    }
+</script>
+
 @* Auto-refresh for AI vs AI *@
 @if (Model.Player1Type != PlayerType.Human && 
      Model.Player2Type != PlayerType.Human && 
      !Model.IsGameOver)
 {
     <script>
-        // Auto-refresh for AI vs AI - reload page after 1 second
+        // Auto-refresh for AI vs AI with gameId
         setTimeout(function() {
-            window.location.reload();
+            @if (!string.IsNullOrEmpty(Model.GameId))
+            {
+                <text>window.location.href = '/Game/Play?gameId=@Model.GameId&nocache=' + new Date().getTime();</text>
+            }
+            else
+            {
+                <text>window.location.reload();</text>
+            }
         }, 1000);
     </script>
 }

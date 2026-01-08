@@ -7,6 +7,36 @@
 <div class="container mt-5">
     <h1 class="text-center mb-4">🎮 Connect4 Online</h1>
 
+    <!-- Repository Selection -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card border-warning">
+                <div class="card-body">
+                    <h5 class="card-title">💾 Storage Method</h5>
+                    <form method="post" asp-page-handler="SetRepository">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <select name="repositoryType" class="form-select" onchange="this.form.submit()">
+                                    <option value="Json" selected="@(Model.CurrentRepository == "Json")">
+                                        📁 JSON Files (saves/games/, saves/configs/)
+                                    </option>
+                                    <option value="Database" selected="@(Model.CurrentRepository == "Database")">
+                                        🗄️ SQLite Database (connect4.db)
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted">
+                                    <strong>Current:</strong> @Model.CurrentRepository
+                                </small>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Success/Error Messages -->
     @if (TempData["SuccessMessage"] != null)
     {
@@ -94,12 +124,12 @@
                                    value="@(Model.LoadedConfig?.WinCondition ?? 4)" min="3" max="7" required />
                         </div>
                         
-                        <div class="mb-3 form-check">
-                            <input type="checkbox" name="isCylinder" class="form-check-input" id="cylinderCheck" 
-                                   value="on" @(Model.LoadedConfig?.IsCylinder == true ? "checked" : "") />
-                            <label class="form-check-label" for="cylinderCheck">
-                                Cylinder Mode (edges wrap around)
-                            </label>
+                        <div class="mb-3">
+                            <label class="form-label">Board Type</label>
+                            <select name="isCylinder" class="form-select" required>
+                                <option value="false" selected="@(Model.LoadedConfig?.IsCylinder != true)">Rectangle (Normal)</option>
+                                <option value="true" selected="@(Model.LoadedConfig?.IsCylinder == true)">Cylinder (Wrap Around)</option>
+                            </select>
                         </div>
                         
                         <button type="submit" class="btn btn-success w-100">Start Game</button>
