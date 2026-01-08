@@ -1,0 +1,177 @@
+﻿@page
+@model WebApp.Pages.Game.PlayModel
+@{
+    ViewData["Title"] = "Play Connect4";
+}
+
+<div class="container mt-4">
+    <h1 class="text-center mb-4">🎮 Connect4</h1>
+
+    <!-- Game Info -->
+    <div class="row mb-3">
+        <div class="col-md-12">
+            <div class="alert alert-info">
+                <strong>Player 1 (X):</strong> @Model.Player1Type | 
+                <strong>Player 2 (O):</strong> @Model.Player2Type | 
+                <strong>Current Turn:</strong> Player @Model.CurrentPlayer (@(Model.CurrentPlayer == 1 ? 'X' : 'O'))
+            </div>
+        </div>
+    </div>
+
+    <!-- Error/Success Messages -->
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-danger">@Model.ErrorMessage</div>
+    }
+    
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success">@TempData["SuccessMessage"]</div>
+    }
+
+    @if (!string.IsNullOrEmpty(Model.AiThinking))
+    {
+        <div class="alert alert-warning">🤖 @Model.AiThinking</div>
+    }
+
+    <!-- Game Over Message -->
+    @if (Model.IsGameOver)
+    {
+        <div class="alert alert-success text-center">
+            <h2>🎉 Game Over! 🎉</h2>
+            <h3>Winner: @Model.Winner</h3>
+            <form method="post" asp-page-handler="NewGame" class="mt-3">
+                <button type="submit" class="btn btn-primary btn-lg">New Game</button>
+            </form>
+        </div>
+    }
+
+    <!-- Game Board -->
+    <div class="card">
+        <div class="card-body text-center">
+            <div class="game-board">
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            @for (int col = 0; col < Model.Config.Columns; col++)
+                            {
+                                <th class="text-center" style="width: 60px; padding: 5px;">
+                                    @if (!Model.IsGameOver)
+                                    {
+                                        <form method="post" asp-page-handler="Move" style="display: inline;">
+                                            <input type="hidden" name="column" value="@col" />
+                                            <button type="submit" class="btn btn-sm btn-outline-primary" 
+                                                    style="width: 100%;">
+                                                ↓
+                                            </button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <span>@(col + 1)</span>
+                                    }
+                                </th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (int row = 0; row < Model.Config.Rows; row++)
+                        {
+                            <tr>
+                                @for (int col = 0; col < Model.Config.Columns; col++)
+                                {
+                                    var cell = Model.Board[row, col];
+                                    var cellClass = cell == 1 ? "bg-danger" : (cell == 2 ? "bg-warning" : "bg-light");
+                                    var cellSymbol = cell == 1 ? "X" : (cell == 2 ? "O" : "");
+                                    
+                                    <td class="text-center @cellClass" 
+                                        style="width: 60px; height: 60px; font-size: 24px; font-weight: bold;">
+                                        @cellSymbol
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <form method="post" asp-page-handler="SaveGame" class="mb-3">
+                <div class="input-group">
+                    <input type="text" name="saveName" class="form-control" 
+                           placeholder="Enter save name" required />
+                    <button type="submit" class="btn btn-success">💾 Save Game</button>
+                </div>
+            </form>
+            
+            <form method="post" asp-page-handler="SaveConfig" class="mb-3">
+                <div class="input-group">
+                    <input type="text" name="configName" class="form-control" 
+                           placeholder="Enter config name" required />
+                    <button type="submit" class="btn btn-primary">⚙️ Save Configuration</button>
+                </div>
+            </form>
+        </div>
+        <div class="col-md-6 text-end">
+            <a asp-page="/Index" class="btn btn-secondary">🏠 Back to Home</a>
+        </div>
+    </div>
+
+    <!-- Game Info -->
+    <div class="row mt-3">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5>Game Configuration</h5>
+                    <ul>
+                        <li><strong>Board Size:</strong> @Model.Config.Rows x @Model.Config.Columns</li>
+                        <li><strong>Win Condition:</strong> @Model.Config.WinCondition in a row</li>
+                        <li><strong>Board Type:</strong> @(Model.Config.IsCylinder ? "Cylinder" : "Rectangle")</li>
+                        <li><strong>Game ID:</strong> @Model.GameId</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .game-board {
+        background-color: #0066cc;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        display: inline-block;
+        margin: 0 auto;
+    }
+    
+    .table-bordered td {
+        border: 3px solid #004080 !important;
+        border-radius: 50%;
+    }
+    
+    .bg-danger {
+        background-color: #dc3545 !important;
+    }
+    
+    .bg-warning {
+        background-color: #ffc107 !important;
+    }
+</style>
+
+@* Auto-refresh for AI vs AI *@
+@if (Model.Player1Type != ConsoleApp.GameEngine.PlayerType.Human && 
+     Model.Player2Type != ConsoleApp.GameEngine.PlayerType.Human && 
+     !Model.IsGameOver)
+{
+    <script>
+        // Auto-refresh for AI vs AI - reload page after 1 second
+        setTimeout(function() {
+            window.location.reload();
+        }, 1000);
+    </script>
+}

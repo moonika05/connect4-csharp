@@ -1,0 +1,188 @@
+﻿@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Connect4 - Home";
+}
+
+<div class="container mt-5">
+    <h1 class="text-center mb-4">🎮 Connect4 Online</h1>
+
+    <!-- Success/Error Messages -->
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+    
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <div class="row">
+        <!-- New Game Section -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h3>🆕 New Game</h3>
+                </div>
+                <div class="card-body">
+                    <!-- Config Status (OUTSIDE form) -->
+                    @if (Model.LoadedConfig != null)
+                    {
+                        <div class="alert alert-info d-flex justify-content-between align-items-center">
+                            <small>📋 Using loaded config: <strong>@Model.LoadedConfig.Name</strong></small>
+                            <form method="post" asp-page-handler="ClearConfig">
+                                <button type="submit" class="btn btn-sm btn-outline-secondary">Reset to Classic</button>
+                            </form>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-secondary d-flex justify-content-between align-items-center">
+                            <small>Using <strong>Classic</strong> configuration (6x7, Win: 4, Rectangle)</small>
+                            <form method="post" asp-page-handler="ClearConfig">
+                                <button type="submit" class="btn btn-sm btn-outline-secondary">Reset to Classic</button>
+                            </form>
+                        </div>
+                    }
+                    
+                    <!-- New Game Form -->
+                    <form method="post" asp-page-handler="NewGame">
+                        <div class="mb-3">
+                            <label class="form-label">Player 1 (X)</label>
+                            <select name="player1Type" class="form-select" required>
+                                <option value="Human">Human</option>
+                                <option value="AIEasy">AI - Easy</option>
+                                <option value="AIMedium">AI - Medium</option>
+                                <option value="AIHard">AI - Hard</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Player 2 (O)</label>
+                            <select name="player2Type" class="form-select" required>
+                                <option value="Human" selected>Human</option>
+                                <option value="AIEasy">AI - Easy</option>
+                                <option value="AIMedium">AI - Medium</option>
+                                <option value="AIHard">AI - Hard</option>
+                            </select>
+                        </div>
+                        
+                        <hr />
+                        <h5>⚙️ Game Configuration</h5>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Board Rows (4-10)</label>
+                            <input type="number" name="rows" class="form-control" 
+                                   value="@(Model.LoadedConfig?.Rows ?? 6)" min="4" max="10" required />
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Board Columns (4-10)</label>
+                            <input type="number" name="columns" class="form-control" 
+                                   value="@(Model.LoadedConfig?.Columns ?? 7)" min="4" max="10" required />
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Win Condition (3-7)</label>
+                            <input type="number" name="winCondition" class="form-control" 
+                                   value="@(Model.LoadedConfig?.WinCondition ?? 4)" min="3" max="7" required />
+                        </div>
+                        
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" name="isCylinder" class="form-check-input" id="cylinderCheck" 
+                                   value="on" @(Model.LoadedConfig?.IsCylinder == true ? "checked" : "") />
+                            <label class="form-check-label" for="cylinderCheck">
+                                Cylinder Mode (edges wrap around)
+                            </label>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-success w-100">Start Game</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Load & Manage Section -->
+        <div class="col-md-6">
+            <!-- Load Game -->
+            <div class="card mb-3">
+                <div class="card-header bg-info text-white">
+                    <h3>💾 Saved Games</h3>
+                </div>
+                <div class="card-body">
+                    @if (Model.SavedGames.Any())
+                    {
+                        <div class="list-group">
+                            @foreach (var game in Model.SavedGames.Take(5))
+                            {
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span>@game</span>
+                                    <div>
+                                        <form method="post" asp-page-handler="LoadGame" style="display: inline;">
+                                            <input type="hidden" name="gameName" value="@game" />
+                                            <button type="submit" class="btn btn-sm btn-info">Load</button>
+                                        </form>
+                                        <form method="post" asp-page-handler="DeleteGame" style="display: inline;">
+                                            <input type="hidden" name="gameName" value="@game" />
+                                            <button type="submit" class="btn btn-sm btn-danger" 
+                                                    onclick="return confirm('Delete this game?')">Delete</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                        @if (Model.SavedGames.Count > 5)
+                        {
+                            <p class="text-muted mt-2">Showing 5 of @Model.SavedGames.Count games</p>
+                        }
+                    }
+                    else
+                    {
+                        <p class="text-muted">No saved games found.</p>
+                    }
+                </div>
+            </div>
+
+            <!-- Saved Configurations -->
+            <div class="card">
+                <div class="card-header bg-secondary text-white">
+                    <h3>⚙️ Saved Configurations</h3>
+                </div>
+                <div class="card-body">
+                    @if (Model.SavedConfigs.Any())
+                    {
+                        <div class="list-group">
+                            @foreach (var config in Model.SavedConfigs.Take(5))
+                            {
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span>@config</span>
+                                    <div>
+                                        <form method="post" asp-page-handler="LoadConfig" style="display: inline;">
+                                            <input type="hidden" name="configName" value="@config" />
+                                            <button type="submit" class="btn btn-sm btn-secondary">Load</button>
+                                        </form>
+                                        <form method="post" asp-page-handler="DeleteConfig" style="display: inline;">
+                                            <input type="hidden" name="configName" value="@config" />
+                                            <button type="submit" class="btn btn-sm btn-danger" 
+                                                    onclick="return confirm('Delete this config?')">Delete</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-muted">No saved configurations.</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

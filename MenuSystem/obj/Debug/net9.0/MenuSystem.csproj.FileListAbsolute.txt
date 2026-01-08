@@ -1,0 +1,11 @@
+/Users/moonikaminaskin/dev/icd0008-25f/hyper-connectx/MenuSystem/bin/Debug/net9.0/MenuSystem.deps.json
+/Users/moonikaminaskin/dev/icd0008-25f/hyper-connectx/MenuSystem/bin/Debug/net9.0/MenuSystem.dll
+/Users/moonikaminaskin/dev/icd0008-25f/hyper-connectx/MenuSystem/bin/Debug/net9.0/MenuSystem.pdb
+/Users/moonikaminaskin/dev/icd0008-25f/hyper-connectx/MenuSystem/obj/Debug/net9.0/MenuSystem.GeneratedMSBuildEditorConfig.editorconfig
+/Users/moonikaminaskin/dev/icd0008-25f/hyper-connectx/MenuSystem/obj/Debug/net9.0/MenuSystem.AssemblyInfoInputs.cache
+/Users/moonikaminaskin/dev/icd0008-25f/hyper-connectx/MenuSystem/obj/Debug/net9.0/MenuSystem.AssemblyInfo.cs
+/Users/moonikaminaskin/dev/icd0008-25f/hyper-connectx/MenuSystem/obj/Debug/net9.0/MenuSystem.csproj.CoreCompileInputs.cache
+/Users/moonikaminaskin/dev/icd0008-25f/hyper-connectx/MenuSystem/obj/Debug/net9.0/MenuSystem.dll
+/Users/moonikaminaskin/dev/icd0008-25f/hyper-connectx/MenuSystem/obj/Debug/net9.0/refint/MenuSystem.dll
+/Users/moonikaminaskin/dev/icd0008-25f/hyper-connectx/MenuSystem/obj/Debug/net9.0/MenuSystem.pdb
+/Users/moonikaminaskin/dev/icd0008-25f/hyper-connectx/MenuSystem/obj/Debug/net9.0/ref/MenuSystem.dll

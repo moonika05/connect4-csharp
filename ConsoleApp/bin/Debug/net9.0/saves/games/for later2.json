@@ -1,0 +1,70 @@
+{
+  "GameId": "b233a3ed-5015-441a-8113-92ea947ec32b",
+  "SavedAt": "2025-12-12T23:56:42.3383+02:00",
+  "Configuration": {
+    "Name": "Classic",
+    "Rows": 6,
+    "Columns": 7,
+    "WinCondition": 4,
+    "IsCylinder": false
+  },
+  "Board": [
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      1,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  ],
+  "CurrentPlayer": 2,
+  "IsGameOver": false,
+  "Winner": null
+}
