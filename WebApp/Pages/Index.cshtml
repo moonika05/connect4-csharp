@@ -152,7 +152,7 @@
                             @foreach (var game in Model.SavedGames.Take(5))
                             {
                                 <div class="list-group-item d-flex justify-content-between align-items-center">
-                                    <span>@game</span>
+                                    <span>@game.Replace(".json", "")</span>
                                     <div>
                                         <form method="post" asp-page-handler="LoadGame" style="display: inline;">
                                             <input type="hidden" name="gameName" value="@game" />
@@ -191,7 +191,7 @@
                             @foreach (var config in Model.SavedConfigs.Take(5))
                             {
                                 <div class="list-group-item d-flex justify-content-between align-items-center">
-                                    <span>@config</span>
+                                    <span>@config.Replace(".json", "")</span>
                                     <div>
                                         <form method="post" asp-page-handler="LoadConfig" style="display: inline;">
                                             <input type="hidden" name="configName" value="@config" />

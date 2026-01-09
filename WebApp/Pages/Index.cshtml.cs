@@ -28,25 +28,35 @@ namespace WebApp.Pages
             // Get current repository type from session (default: Json)
             CurrentRepository = HttpContext.Session.GetString("RepositoryType") ?? "Json";
             
+            Console.WriteLine($"=== Index.OnGet === CurrentRepository: {CurrentRepository}");
+            
             // Update repository instance based on session
             UpdateRepository();
             
             // Load saved games and configs
             SavedGames = _repository.GetAllSavedGames();
             SavedConfigs = _repository.GetAllSavedConfigurations();
+            
+            Console.WriteLine($"Found {SavedGames.Count} games and {SavedConfigs.Count} configs");
 
             // Load configuration from session if exists
             try
             {
-                var configData = HttpContext.Session.GetObject<JsonElement>("GameConfiguration");
-                if (configData.ValueKind != JsonValueKind.Undefined)
+                var configName = HttpContext.Session.GetString("Config_Name");
+                var configRows = HttpContext.Session.GetInt32("Config_Rows");
+                var configColumns = HttpContext.Session.GetInt32("Config_Columns");
+                var configWinCondition = HttpContext.Session.GetInt32("Config_WinCondition");
+                var configIsCylinderStr = HttpContext.Session.GetString("Config_IsCylinder");
+                
+                if (configRows.HasValue && configColumns.HasValue && configWinCondition.HasValue)
                 {
+                    bool isCylinder = !string.IsNullOrEmpty(configIsCylinderStr) && bool.Parse(configIsCylinderStr);
                     LoadedConfig = new GameConfiguration(
-                        configData.GetProperty("Name").GetString() ?? "Custom",
-                        configData.GetProperty("Rows").GetInt32(),
-                        configData.GetProperty("Columns").GetInt32(),
-                        configData.GetProperty("WinCondition").GetInt32(),
-                        configData.GetProperty("IsCylinder").GetBoolean()
+                        configName ?? "Custom",
+                        configRows.Value,
+                        configColumns.Value,
+                        configWinCondition.Value,
+                        isCylinder
                     );
                 }
             }
@@ -56,9 +66,10 @@ namespace WebApp.Pages
             }
         }
 
-        // NEW: Set repository type
         public IActionResult OnPostSetRepository(string repositoryType)
         {
+            Console.WriteLine($"=== OnPostSetRepository === Type: {repositoryType}");
+            
             // Save repository type to session
             HttpContext.Session.SetString("RepositoryType", repositoryType);
             
@@ -72,8 +83,12 @@ namespace WebApp.Pages
             Console.WriteLine($"\n========== OnPostNewGame ==========");
             Console.WriteLine($"Starting NEW game - clearing old session data");
             
-            // Or clear everything:
-            HttpContext.Session.Clear();
+            // CLEAR OLD GAME DATA
+            HttpContext.Session.Remove("Board");
+            HttpContext.Session.Remove("CurrentPlayer");
+            HttpContext.Session.Remove("IsGameOver");
+            HttpContext.Session.Remove("Winner");
+            HttpContext.Session.Remove("GameId");
             
             // Validate
             if (rows < 4 || rows > 10)
@@ -94,7 +109,7 @@ namespace WebApp.Pages
                 return RedirectToPage();
             }
 
-            // Save NEW game settings
+            // Save to BOTH Session AND TempData
             HttpContext.Session.SetString("Player1Type", player1Type);
             HttpContext.Session.SetString("Player2Type", player2Type);
             TempData["Player1Type"] = player1Type;
@@ -111,14 +126,11 @@ namespace WebApp.Pages
             HttpContext.Session.SetInt32("Config_WinCondition", config.WinCondition);
             HttpContext.Session.SetString("Config_IsCylinder", config.IsCylinder.ToString());
             
-            // ALSO save to TempData
             TempData["Config_Name"] = config.Name;
             TempData["Config_Rows"] = config.Rows;
             TempData["Config_Columns"] = config.Columns;
             TempData["Config_WinCondition"] = config.WinCondition;
             TempData["Config_IsCylinder"] = config.IsCylinder.ToString();
-            
-            Console.WriteLine($"New game session created");
 
             return RedirectToPage("/Game/Play");
         }
@@ -127,6 +139,8 @@ namespace WebApp.Pages
         {
             UpdateRepository();
             
+            Console.WriteLine($"=== OnPostLoadGame === Game: {gameName}, Repository: {CurrentRepository}");
+            
             var state = _repository.LoadGame(gameName);
             if (state == null)
             {
@@ -134,19 +148,29 @@ namespace WebApp.Pages
                 return RedirectToPage();
             }
 
-            // Save to session
-            HttpContext.Session.SetObject("CurrentGame", new
-            {
-                Config = state.Configuration,
-                state.Board,
-                state.CurrentPlayer,
-                state.IsGameOver,
-                state.Winner,
-                state.GameId,
-                Player1Type = PlayerType.Human,
-                Player2Type = PlayerType.Human
-            });
+            // Clear old session
+            HttpContext.Session.Clear();
 
+            // Save config
+            HttpContext.Session.SetString("Config_Name", state.Configuration.Name);
+            HttpContext.Session.SetInt32("Config_Rows", state.Configuration.Rows);
+            HttpContext.Session.SetInt32("Config_Columns", state.Configuration.Columns);
+            HttpContext.Session.SetInt32("Config_WinCondition", state.Configuration.WinCondition);
+            HttpContext.Session.SetString("Config_IsCylinder", state.Configuration.IsCylinder.ToString());
+            
+            // Save board
+            var options = new JsonSerializerOptions
+            {
+                Converters = { new WebApp.Helpers.MultiDimensionalArrayConverter() }
+            };
+            string boardJson = JsonSerializer.Serialize(state.Board, options);
+            HttpContext.Session.SetString("Board", boardJson);
+            
+            // Save game state
+            HttpContext.Session.SetInt32("CurrentPlayer", state.CurrentPlayer);
+            HttpContext.Session.SetString("IsGameOver", state.IsGameOver.ToString());
+            HttpContext.Session.SetString("Winner", state.Winner ?? "");
+            HttpContext.Session.SetString("GameId", state.GameId);
             HttpContext.Session.SetString("Player1Type", "Human");
             HttpContext.Session.SetString("Player2Type", "Human");
 
@@ -157,6 +181,8 @@ namespace WebApp.Pages
         public IActionResult OnPostDeleteGame(string gameName)
         {
             UpdateRepository();
+            
+            Console.WriteLine($"=== OnPostDeleteGame === Game: {gameName}, Repository: {CurrentRepository}");
             
             if (_repository.DeleteGame(gameName))
             {
@@ -173,6 +199,8 @@ namespace WebApp.Pages
         {
             UpdateRepository();
             
+            Console.WriteLine($"=== OnPostLoadConfig === Config: {configName}, Repository: {CurrentRepository}");
+            
             var config = _repository.LoadConfiguration(configName);
             if (config == null)
             {
@@ -180,7 +208,12 @@ namespace WebApp.Pages
                 return RedirectToPage();
             }
 
-            HttpContext.Session.SetObject("GameConfiguration", config);
+            HttpContext.Session.SetString("Config_Name", config.Name);
+            HttpContext.Session.SetInt32("Config_Rows", config.Rows);
+            HttpContext.Session.SetInt32("Config_Columns", config.Columns);
+            HttpContext.Session.SetInt32("Config_WinCondition", config.WinCondition);
+            HttpContext.Session.SetString("Config_IsCylinder", config.IsCylinder.ToString());
+            
             TempData["SuccessMessage"] = $"Configuration '{config.Name}' loaded!";
             return RedirectToPage();
         }
@@ -188,6 +221,8 @@ namespace WebApp.Pages
         public IActionResult OnPostDeleteConfig(string configName)
         {
             UpdateRepository();
+            
+            Console.WriteLine($"=== OnPostDeleteConfig === Config: {configName}, Repository: {CurrentRepository}");
             
             if (_repository.DeleteConfiguration(configName))
             {
@@ -202,7 +237,12 @@ namespace WebApp.Pages
 
         public IActionResult OnPostClearConfig()
         {
-            HttpContext.Session.Remove("GameConfiguration");
+            HttpContext.Session.Remove("Config_Name");
+            HttpContext.Session.Remove("Config_Rows");
+            HttpContext.Session.Remove("Config_Columns");
+            HttpContext.Session.Remove("Config_WinCondition");
+            HttpContext.Session.Remove("Config_IsCylinder");
+            
             TempData["SuccessMessage"] = "Configuration reset to Classic!";
             return RedirectToPage();
         }
@@ -211,6 +251,8 @@ namespace WebApp.Pages
         private void UpdateRepository()
         {
             var repositoryType = HttpContext.Session.GetString("RepositoryType") ?? "Json";
+            
+            Console.WriteLine($"UpdateRepository: {repositoryType}");
             
             if (repositoryType == "Database")
             {

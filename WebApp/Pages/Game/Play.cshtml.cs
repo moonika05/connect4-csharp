@@ -5,12 +5,13 @@ using WebApp.Helpers;
 using System.Text.Json;
 using ConsoleApp.GameEngine.Models;
 using ConsoleApp.GameEngine.Storage.Database;
+using ConsoleApp.GameEngine.Storage.Json;
 
 namespace WebApp.Pages.Game
 {
     public class PlayModel : PageModel
     {
-        private readonly IGameRepository _repository;
+        private IGameRepository _repository;
         
         // Static dictionary for in-memory game storage (shared across all users)
         private static readonly Dictionary<string, GameState> _activeGames = new();
@@ -32,6 +33,7 @@ namespace WebApp.Pages.Game
         public string? ErrorMessage { get; set; }
         public string? AiThinking { get; set; }
         public string? ShareableLink { get; set; }
+        
 
         public void OnGet(string? gameId = null, long? nocache = null)
         {
@@ -188,10 +190,13 @@ namespace WebApp.Pages.Game
             }
         }
 
-        public IActionResult OnPostSaveGame(string saveName)
+        public IActionResult OnPostSaveGame(string saveName, string? gameId)
         {
-            // Check if multiplayer
-            var gameId = Request.Query["gameId"].ToString();
+            // Update repository based on session setting
+            UpdateRepository();
+
+            // Check if multiplayer (gameId from form or query string)
+            gameId ??= Request.Query["gameId"].ToString();
             if (!string.IsNullOrEmpty(gameId))
             {
                 LoadGameFromMemory(gameId);
@@ -225,9 +230,21 @@ namespace WebApp.Pages.Game
             return RedirectToPage(new { gameId = GameId, nocache = DateTime.Now.Ticks });
         }
 
-        public IActionResult OnPostSaveConfig(string configName)
+        public IActionResult OnPostSaveConfig(string configName, string? gameId)
         {
-            LoadGameFromSession();
+            // Update repository based on session setting
+            UpdateRepository();
+
+            // Check if multiplayer (gameId from form or query string)
+            gameId ??= Request.Query["gameId"].ToString();
+            if (!string.IsNullOrEmpty(gameId))
+            {
+                LoadGameFromMemory(gameId);
+            }
+            else
+            {
+                LoadGameFromSession();
+            }
 
             if (string.IsNullOrWhiteSpace(configName))
             {
@@ -646,6 +663,23 @@ namespace WebApp.Pages.Game
             {
                 Console.WriteLine("=== Config missing, initializing new ===");
                 InitializeNewGame();
+            }
+        }
+
+        // Update repository instance based on session (same as Index.cshtml.cs)
+        private void UpdateRepository()
+        {
+            var repositoryType = HttpContext.Session.GetString("RepositoryType") ?? "Json";
+
+            Console.WriteLine($"Play.UpdateRepository: {repositoryType}");
+
+            if (repositoryType == "Database")
+            {
+                _repository = new DbRepository();
+            }
+            else
+            {
+                _repository = new JsonRepository();
             }
         }
     }

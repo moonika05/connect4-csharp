@@ -1,11 +1,13 @@
+using ConsoleApp.GameEngine;
 using ConsoleApp.GameEngine.Storage.Database;
 using ConsoleApp.GameEngine.Storage.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Add services to the container.
 builder.Services.AddRazorPages();
 
-// Session support
+// Add session support
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
 {
@@ -14,11 +16,24 @@ builder.Services.AddSession(options =>
     options.Cookie.IsEssential = true;
 });
 
-// Register repositories
-builder.Services.AddScoped<IGameRepository, JsonRepository>();
+// REMOVE THIS: (ära registreeri siin!)
+// builder.Services.AddScoped<IGameRepository, JsonRepository>();
+
+// Register BOTH repositories with different lifetimes
+builder.Services.AddScoped<JsonRepository>();
+builder.Services.AddScoped<DbRepository>();
+
+// Add factory for repository selection
+builder.Services.AddScoped<IGameRepository>(sp =>
+{
+    // This will be overridden per-request based on session
+    // Default to JsonRepository
+    return sp.GetRequiredService<JsonRepository>();
+});
 
 var app = builder.Build();
 
+// Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
@@ -32,8 +47,8 @@ app.UseRouting();
 
 app.UseAuthorization();
 
-// CRITICAL: UseSession MUST be AFTER UseRouting and BEFORE MapRazorPages!
-app.UseSession();  // <-- CHECK THIS IS HERE!
+// Enable session (MUST be after UseRouting, before MapRazorPages)
+app.UseSession();
 
 app.MapRazorPages();
 
