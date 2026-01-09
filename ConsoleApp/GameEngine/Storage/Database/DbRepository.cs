@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using ConsoleApp.GameEngine.Models;
@@ -14,17 +15,34 @@ namespace ConsoleApp.GameEngine.Storage.Database
     {
         private readonly AppDbContext _context;
         private readonly JsonSerializerOptions _jsonOptions;
-        
+
+        // Find project root by looking for .git folder or solution file
+        private static string GetProjectRoot()
+        {
+            var dir = AppDomain.CurrentDomain.BaseDirectory;
+            while (!string.IsNullOrEmpty(dir))
+            {
+                if (Directory.Exists(Path.Combine(dir, ".git")) ||
+                    File.Exists(Path.Combine(dir, "hyper-connectx.sln")))
+                    return dir;
+                dir = Directory.GetParent(dir)?.FullName;
+            }
+            return AppDomain.CurrentDomain.BaseDirectory; // fallback
+        }
+
         public DbRepository()
         {
-            // Configure database connection (SQLite)
+            // Configure database connection (SQLite) at shared project root location
+            var projectRoot = GetProjectRoot();
+            var dbPath = Path.Combine(projectRoot, "connect4.db");
+
             var options = new DbContextOptionsBuilder<AppDbContext>()
-                .UseSqlite("Data Source=connect4.db")  // Database file: connect4.db
+                .UseSqlite($"Data Source={dbPath}")  // Database file at project root
                 .Options;
-            
+
             _context = new AppDbContext(options);
             _context.Database.EnsureCreated();  // Create database if doesn't exist
-            
+
             // JSON options for serializing 2D arrays (Board)
             _jsonOptions = new JsonSerializerOptions
             {

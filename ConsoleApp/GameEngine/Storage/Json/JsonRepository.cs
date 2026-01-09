@@ -10,24 +10,39 @@ using ConsoleApp.GameEngine.Storage.Database;
 namespace ConsoleApp.GameEngine.Storage.Json
 {
     // JSON file-based repository implementation
-    // Saves games and configs as JSON files in "saves/" folder
+    // Saves games and configs as JSON files in shared "saves/" folder at project root
     public class JsonRepository : IGameRepository
     {
-        private readonly string _gamesFolder;      // "saves/games/"
-        private readonly string _configsFolder;    // "saves/configs/"
-        
+        private readonly string _gamesFolder;      // "{projectRoot}/saves/games/"
+        private readonly string _configsFolder;    // "{projectRoot}/saves/configs/"
+
         private readonly JsonSerializerOptions _jsonOptions;
-        
+
+        // Find project root by looking for .git folder or solution file
+        private static string GetProjectRoot()
+        {
+            var dir = AppDomain.CurrentDomain.BaseDirectory;
+            while (!string.IsNullOrEmpty(dir))
+            {
+                if (Directory.Exists(Path.Combine(dir, ".git")) ||
+                    File.Exists(Path.Combine(dir, "hyper-connectx.sln")))
+                    return dir;
+                dir = Directory.GetParent(dir)?.FullName;
+            }
+            return AppDomain.CurrentDomain.BaseDirectory; // fallback
+        }
+
         public JsonRepository()
         {
-            // Set up folder paths
-            _gamesFolder = Path.Combine("saves", "games");
-            _configsFolder = Path.Combine("saves", "configs");
-            
+            // Set up folder paths using shared project root location
+            var projectRoot = GetProjectRoot();
+            _gamesFolder = Path.Combine(projectRoot, "saves", "games");
+            _configsFolder = Path.Combine(projectRoot, "saves", "configs");
+
             // Create folders if they don't exist
             Directory.CreateDirectory(_gamesFolder);
             Directory.CreateDirectory(_configsFolder);
-            
+
             // Configure JSON serialization
             _jsonOptions = new JsonSerializerOptions
             {
