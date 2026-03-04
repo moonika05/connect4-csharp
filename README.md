@@ -1,11 +1,3 @@
-# icd0008-25f
-
-
-Moonika Minaškin,
-243832IADB, 
-momina@taltech.ee,
-momina
-
 # Connect4 Game
 
 C# implementation of Connect4 game with AI opponent.
